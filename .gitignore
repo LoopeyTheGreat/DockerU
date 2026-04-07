@@ -11,3 +11,6 @@ Thumbs.db
 
 # Runtime artifacts
 *.log
+
+# AI Notes
+_AI_Notes_/
