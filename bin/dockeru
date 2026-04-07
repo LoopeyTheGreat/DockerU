@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# =============================================================================
+# DockerU — Multi-Daemon Rootless Docker Command Wrapper
+#
+# Routes Docker commands to the correct rootless Docker daemon based on
+# container name, working directory, or explicit daemon specification.
+#
+# Usage: dockeru [OPTIONS] <docker-command> [args...]
+#        dockeru [MANAGEMENT-COMMAND] [args...]
+#
+# https://github.com/LoopeyTheGreat/DockerU
+# =============================================================================
+
+set -euo pipefail
+
+readonly DOCKERU_VERSION="0.1.0-dev"
+
+# Resolve the real location of this script (handles symlinks)
+_resolve_script_dir() {
+    local source="${BASH_SOURCE[0]}"
+    while [[ -L "$source" ]]; do
+        local dir
+        dir="$(cd -P "$(dirname "$source")" && pwd)"
+        source="$(readlink "$source")"
+        [[ "$source" != /* ]] && source="$dir/$source"
+    done
+    cd -P "$(dirname "$source")" && pwd
+}
+
+DOCKERU_BIN_DIR="$(_resolve_script_dir)"
+readonly DOCKERU_BIN_DIR
+readonly DOCKERU_LIB_DIR="${DOCKERU_BIN_DIR}/../lib/dockeru"
+
+# --- Source library modules ---------------------------------------------------
+
+for _lib in utils platform config discovery router management aggregator ui; do
+    _lib_file="${DOCKERU_LIB_DIR}/${_lib}.sh"
+    if [[ -f "$_lib_file" ]]; then
+        # shellcheck source=/dev/null
+        source "$_lib_file"
+    else
+        printf 'dockeru: fatal: missing library %s\n' "$_lib_file" >&2
+        exit 1
+    fi
+done
+unset _lib _lib_file
+
+# --- Global state -------------------------------------------------------------
+
+DOCKERU_VERBOSE=false
+DOCKERU_DRY_RUN=false
+DOCKERU_QUIET=false
+DOCKERU_USE_COLOR=true
+DOCKERU_TARGET_DAEMON=""
+
+# --- Argument parsing ---------------------------------------------------------
+
+_parse_global_opts() {
+    # Parse and consume global options, leaving Docker args in DOCKERU_ARGS
+    DOCKERU_ARGS=()
+    while (( $# )); do
+        case "$1" in
+            -d|--daemon)
+                [[ -z "${2:-}" ]] && die "Option $1 requires a daemon name"
+                DOCKERU_TARGET_DAEMON="$2"
+                shift 2
+                ;;
+            -v|--verbose)
+                DOCKERU_VERBOSE=true
+                shift
+                ;;
+            -n|--dry-run)
+                DOCKERU_DRY_RUN=true
+                DOCKERU_VERBOSE=true   # dry-run implies verbose
+                shift
+                ;;
+            -q|--quiet)
+                DOCKERU_QUIET=true
+                shift
+                ;;
+            --no-color)
+                DOCKERU_USE_COLOR=false
+                shift
+                ;;
+            --sudo)
+                DOCKERU_MODIFY_SYSTEM=true
+                shift
+                ;;
+            *)
+                DOCKERU_ARGS+=("$1")
+                shift
+                ;;
+        esac
+    done
+}
+
+# --- Dispatch -----------------------------------------------------------------
+
+main() {
+    _parse_global_opts "$@"
+    set -- "${DOCKERU_ARGS[@]:+${DOCKERU_ARGS[@]}}"
+
+    # No arguments → show brief help
+    if (( $# == 0 )); then
+        show_brief_help
+        exit 0
+    fi
+
+    # Management commands (--prefixed)
+    case "${1:-}" in
+        --help|-h)      show_help; exit 0 ;;
+        --version)      printf 'dockeru %s\n' "$DOCKERU_VERSION"; exit 0 ;;
+        --add)          shift; cmd_add "$@"; exit $? ;;
+        --remove)       shift; cmd_remove "$@"; exit $? ;;
+        --list)         shift; cmd_list "$@"; exit $? ;;
+        --refresh)      shift; cmd_refresh "$@"; exit $? ;;
+        --status)       shift; cmd_status "$@"; exit $? ;;
+        --doctor)       shift; cmd_doctor "$@"; exit $? ;;
+    esac
+
+    # Docker passthrough — load config, route, execute
+    config_load
+    route_and_exec "$@"
+}
+
+main "$@"

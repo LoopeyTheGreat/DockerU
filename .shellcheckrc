@@ -1,0 +1,16 @@
+# ShellCheck configuration for DockerU
+# https://www.shellcheck.net/wiki/
+
+# Require bash (not sh/dash)
+shell=bash
+
+# Allow sourcing from non-constant paths (we resolve at runtime)
+disable=SC1090,SC1091
+
+# SC2034: Variables set here are used in other sourced files
+# SC2154: Variables are defined in other sourced files
+# These are expected in a multi-file sourced library architecture
+disable=SC2034,SC2154
+
+# Enable all other checks by default
+enable=all

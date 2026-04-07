@@ -1,0 +1,12 @@
+# DockerU — Excluded Containers
+#
+# Container names listed here will NOT be auto-routed because they
+# exist in multiple daemons. Use: dockeru -d <daemon> ... <container>
+#
+# Auto-detected duplicates are added by 'dockeru --refresh'.
+# You may also add manual exclusions below.
+#
+# Example:
+# komodo_periphery
+# socket_proxy
+# portainer_agent

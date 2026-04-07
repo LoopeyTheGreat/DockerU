@@ -1,0 +1,47 @@
+# DockerU Configuration
+# See: dockeru --help | man dockeru
+#
+# System-wide:  /etc/dockeru/dockeru.conf
+# Per-user:     ~/.config/dockeru/dockeru.conf
+#
+# Syntax: INI-style with [section "name"] headers
+# Lines starting with # are comments. Blank lines are ignored.
+
+[settings]
+# Show the resolved command before execution (true/false)
+verbose=false
+
+# Socket path pattern for rootless Docker daemons
+# %UID% is replaced with the daemon user's UID at runtime
+socket_pattern=/run/user/%UID%/docker.sock
+
+# Auto-refresh container map when a container is not found (true/false)
+# When true, dockeru will run discovery once before reporting "not found"
+auto_refresh=true
+
+# Override Docker binary path (leave empty for auto-detection)
+# docker_bin=/usr/bin/docker
+
+# =============================================================================
+# Daemon Definitions
+# =============================================================================
+# Each [daemon "username"] section registers a rootless Docker daemon user.
+#
+# Required:
+#   uid=<number>       The system UID of the daemon user
+#
+# Optional:
+#   home=<path>        Working directory for compose commands (CWD routing)
+#
+# Container mappings are auto-generated in containers.map by 'dockeru --refresh'
+# and are NOT stored in this file.
+#
+# Example:
+#
+# [daemon "docker-nextcloud"]
+# uid=1105
+# home=/opt/nextcloud
+#
+# [daemon "docker-immich_prism"]
+# uid=1104
+# home=/opt/immich_prism
