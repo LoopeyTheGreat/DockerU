@@ -35,7 +35,7 @@ _parse_ini_file() {
 
     local line_num=0
     while IFS= read -r line || [[ -n "$line" ]]; do
-        (( line_num++ ))
+        (( line_num += 1 ))
 
         # Strip leading/trailing whitespace
         line="${line#"${line%%[![:space:]]*}"}"

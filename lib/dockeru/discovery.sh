@@ -101,7 +101,7 @@ refresh_daemon_containers() {
         while IFS= read -r container; do
             [[ -z "$container" ]] && continue
             DOCKERU_CONTAINER_MAP["$container"]="$daemon_name"
-            (( count++ ))
+            (( count += 1 ))
         done <<< "$containers"
     fi
 

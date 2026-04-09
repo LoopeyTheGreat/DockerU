@@ -82,20 +82,20 @@ check_prerequisites() {
     # Bash version
     if (( BASH_VERSINFO[0] < 5 )); then
         log_error "Bash 5.0+ required (current: ${BASH_VERSION})"
-        (( issues++ ))
+        (( issues += 1 ))
     fi
 
     # Docker binary
     detect_platform
     if [[ -z "$DOCKERU_DOCKER_BIN" ]]; then
         log_error "Docker not found in PATH or common locations"
-        (( issues++ ))
+        (( issues += 1 ))
     fi
 
     # sudo
     if ! has_command sudo; then
         log_error "'sudo' not found — required for daemon user switching"
-        (( issues++ ))
+        (( issues += 1 ))
     fi
 
     # getent (used for user lookups)

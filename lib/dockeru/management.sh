@@ -78,7 +78,7 @@ _add_daemon_auto() {
     local count=0
     local c
     for c in "${!DOCKERU_CONTAINER_MAP[@]}"; do
-        [[ "${DOCKERU_CONTAINER_MAP[$c]}" == "$daemon_user" ]] && (( count++ ))
+            [[ "${DOCKERU_CONTAINER_MAP[$c]}" == "$daemon_user" ]] && (( count += 1 ))
     done
 
     log_info "Added '${daemon_user}' with ${count} container(s)."
@@ -104,7 +104,7 @@ _add_daemon_interactive() {
         local uid username socket
         IFS=: read -r uid username socket <<< "$entry"
         printf '  %s%d%s) %s (UID %s) — %s\n' "$CLR_CYAN" "$i" "$CLR_RESET" "$username" "$uid" "$socket"
-        (( i++ ))
+        (( i += 1 ))
     done
     printf '  %s%d%s) Add all\n' "$CLR_CYAN" "$i" "$CLR_RESET"
     printf '\n'
@@ -160,7 +160,7 @@ _remove_daemon() {
     # Count containers that will be unregistered
     local count=0 c
     for c in "${!DOCKERU_CONTAINER_MAP[@]}"; do
-        [[ "${DOCKERU_CONTAINER_MAP[$c]}" == "$daemon_user" ]] && (( count++ ))
+            [[ "${DOCKERU_CONTAINER_MAP[$c]}" == "$daemon_user" ]] && (( count += 1 ))
     done
 
     printf '%sRemoving daemon:%s %s (UID %s, %d containers)\n' \
@@ -199,7 +199,7 @@ _remove_daemon_interactive() {
     local i=1 d
     for d in "${daemons[@]}"; do
         printf '  %s%d%s) %s (UID %s)\n' "$CLR_CYAN" "$i" "$CLR_RESET" "$d" "${DOCKERU_DAEMON_UIDS[$d]}"
-        (( i++ ))
+        (( i += 1 ))
     done
     printf '\n'
 
@@ -279,7 +279,7 @@ _list_daemon() {
     for c in $(printf '%s\n' "${!DOCKERU_CONTAINER_MAP[@]}" | sort); do
         if [[ "${DOCKERU_CONTAINER_MAP[$c]}" == "$daemon" ]]; then
             printf '  └─ %s\n' "$c"
-            (( count++ ))
+            (( count += 1 ))
         fi
     done
     if (( count == 0 )); then
@@ -312,7 +312,7 @@ cmd_refresh() {
 
         local count=0 c
         for c in "${!DOCKERU_CONTAINER_MAP[@]}"; do
-            [[ "${DOCKERU_CONTAINER_MAP[$c]}" == "$target" ]] && (( count++ ))
+            [[ "${DOCKERU_CONTAINER_MAP[$c]}" == "$target" ]] && (( count += 1 ))
         done
         log_info "Found ${count} container(s) for ${target}."
 
@@ -344,10 +344,10 @@ _refresh_interactive() {
 
     local i=1 d
     printf '  %s%d%s) Refresh ALL\n' "$CLR_CYAN" "$i" "$CLR_RESET"
-    (( i++ ))
+    (( i += 1 ))
     for d in "${daemons[@]}"; do
         printf '  %s%d%s) %s (UID %s)\n' "$CLR_CYAN" "$i" "$CLR_RESET" "$d" "${DOCKERU_DAEMON_UIDS[$d]}"
-        (( i++ ))
+        (( i += 1 ))
     done
     printf '\n'
 
@@ -410,7 +410,7 @@ cmd_status() {
         container_count=0
         local c
         for c in "${!DOCKERU_CONTAINER_MAP[@]}"; do
-            [[ "${DOCKERU_CONTAINER_MAP[$c]}" == "$d" ]] && (( container_count++ ))
+            [[ "${DOCKERU_CONTAINER_MAP[$c]}" == "$d" ]] && (( container_count += 1 ))
         done
 
         # Docker version check (brief)
@@ -443,7 +443,7 @@ cmd_doctor() {
         printf '%sok%s\n' "$CLR_GREEN" "$CLR_RESET"
     else
         printf '%sFAIL (need 5.0+)%s\n' "$CLR_RED" "$CLR_RESET"
-        (( issues++ ))
+        (( issues += 1 ))
     fi
 
     # Docker
@@ -453,7 +453,7 @@ cmd_doctor() {
         printf '%sok%s\n' "$CLR_GREEN" "$CLR_RESET"
     else
         printf '%sFAIL%s\n' "$CLR_RED" "$CLR_RESET"
-        (( issues++ ))
+        (( issues += 1 ))
     fi
 
     # sudo
@@ -462,7 +462,7 @@ cmd_doctor() {
         printf '%sok%s\n' "$CLR_GREEN" "$CLR_RESET"
     else
         printf '%sFAIL (required)%s\n' "$CLR_RED" "$CLR_RESET"
-        (( issues++ ))
+        (( issues += 1 ))
     fi
 
     # Platform
@@ -500,7 +500,7 @@ cmd_doctor() {
             # Check if user exists
             if ! user_exists "$username"; then
                 printf '%suser not found%s\n' "$CLR_RED" "$CLR_RESET"
-                (( issues++ ))
+                (( issues += 1 ))
                 continue
             fi
 
@@ -509,7 +509,7 @@ cmd_doctor() {
                 printf '%ssudo ok%s' "$CLR_GREEN" "$CLR_RESET"
             else
                 printf '%ssudo denied%s' "$CLR_RED" "$CLR_RESET"
-                (( issues++ ))
+                (( issues += 1 ))
             fi
 
             # Check socket
