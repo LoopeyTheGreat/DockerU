@@ -103,6 +103,22 @@ is_root() {
     (( EUID == 0 ))
 }
 
+# Check if a Docker socket is reachable.
+# When root, stat directly. When non-root, /run/user/<uid>/ dirs are
+# mode 700, so we can't stat sockets belonging to other users. In that
+# case return true and let the docker call itself report connectivity.
+socket_reachable() {
+    local socket="$1"
+    if is_root; then
+        [[ -S "$socket" ]]
+    else
+        # Can't stat another user's /run/user/<uid>/ dir without root.
+        # Assume the socket may be present; docker will fail gracefully
+        # if it isn't.
+        true
+    fi
+}
+
 # Require a minimum bash version
 require_bash_version() {
     local required="$1"

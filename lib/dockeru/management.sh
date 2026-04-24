@@ -10,6 +10,13 @@
 cmd_add() {
     config_load
 
+    if ! is_root; then
+        printf '%sNote:%s Daemon registration writes to the system config (/etc/dockeru/).\n' \
+            "$CLR_YELLOW" "$CLR_RESET"
+        printf '       Run %ssudo dockeru --add%s to persist changes for all users.\n\n' \
+            "$CLR_BOLD" "$CLR_RESET"
+    fi
+
     local target="${1:-}"
 
     if [[ -n "$target" ]]; then
@@ -140,6 +147,13 @@ _add_daemon_interactive() {
 
 cmd_remove() {
     config_load
+
+    if ! is_root; then
+        printf '%sNote:%s Daemon removal modifies the system config (/etc/dockeru/).\n' \
+            "$CLR_YELLOW" "$CLR_RESET"
+        printf '       Run %ssudo dockeru --remove%s to modify system-wide configuration.\n\n' \
+            "$CLR_BOLD" "$CLR_RESET"
+    fi
 
     local target="${1:-}"
 
@@ -399,11 +413,17 @@ cmd_status() {
         uid="${DOCKERU_DAEMON_UIDS[$d]}"
         socket="$(get_socket_path "$uid")"
 
-        # Socket status
-        if [[ -S "$socket" ]]; then
-            status="${CLR_GREEN}running${CLR_RESET}"
+        # Socket status — use socket_reachable() so non-root users don't get
+        # false "no socket" on /run/user/<other-uid>/ dirs (mode 700).
+        if is_root; then
+            if [[ -S "$socket" ]]; then
+                status="${CLR_GREEN}running${CLR_RESET}"
+            else
+                status="${CLR_RED}no socket${CLR_RESET}"
+            fi
         else
-            status="${CLR_RED}no socket${CLR_RESET}"
+            # Can't stat other users' sockets without root; show as unknown
+            status="${CLR_YELLOW}unknown${CLR_RESET}"
         fi
 
         # Container count
@@ -413,11 +433,13 @@ cmd_status() {
             [[ "${DOCKERU_CONTAINER_MAP[$c]}" == "$d" ]] && (( container_count += 1 ))
         done
 
-        # Docker version check (brief)
-        if [[ -S "$socket" ]]; then
+        # Docker version check (brief) — only reliable when root
+        if is_root && [[ -S "$socket" ]]; then
             docker_ok="${CLR_GREEN}ok${CLR_RESET}"
-        else
+        elif is_root; then
             docker_ok="${CLR_DIM}n/a${CLR_RESET}"
+        else
+            docker_ok="${CLR_DIM}(use sudo)${CLR_RESET}"
         fi
 
         printf '%-30s %-8s %-10b %-12s %b\n' \
@@ -505,10 +527,15 @@ cmd_doctor() {
             fi
 
             # Check sudo access
-            if sudo -n -u "$username" true 2>/dev/null; then
-                printf '%ssudo ok%s' "$CLR_GREEN" "$CLR_RESET"
-            else
+            if ! sudo -n -u "$username" true 2>/dev/null; then
                 printf '%ssudo denied%s' "$CLR_RED" "$CLR_RESET"
+                (( issues += 1 ))
+            # Check that DOCKER_HOST env passthrough works (requires SETENV in sudoers)
+            elif sudo -n -u "$username" env DOCKERU_TEST=1 sh -c 'test "$DOCKERU_TEST" = "1"' 2>/dev/null; then
+                printf '%ssudo ok (env passthrough ok)%s' "$CLR_GREEN" "$CLR_RESET"
+            else
+                printf '%ssudo ok but SETENV missing%s — run: sudo dockeru --setup-sudo' \
+                    "$CLR_YELLOW" "$CLR_RESET"
                 (( issues += 1 ))
             fi
 
@@ -573,6 +600,116 @@ _append_daemon_to_config() {
 
     log_verbose "Wrote daemon definition to ${conf}"
 }
+
+# --- --setup-sudo ------------------------------------------------------------
+
+cmd_setup_sudo() {
+    if ! is_root; then
+        die "'--setup-sudo' must be run as root. Use: sudo dockeru --setup-sudo"
+    fi
+
+    config_load
+    detect_platform
+
+    local docker_bin="${DOCKERU_DOCKER_BIN:-$(command -v docker 2>/dev/null || echo /usr/bin/docker)}"
+
+    local -a daemon_names
+    readarray -t daemon_names < <(config_get_daemon_names)
+
+    if (( ${#daemon_names[@]} == 0 )); then
+        die "No daemons configured. Run 'sudo dockeru --add' first."
+    fi
+
+    printf '\n%sSudo Setup for DockerU%s\n' "$CLR_BOLD" "$CLR_RESET"
+    printf '%s\n\n' "$(printf '%.0s─' {1..40})"
+    printf 'This will write sudoers drop-in files so that users can run\n'
+    printf 'dockeru commands (e.g. %sdockeru ps%s) without prefixing sudo.\n\n' \
+        "$CLR_BOLD" "$CLR_RESET"
+
+    # Collect local users who should get access (non-system, non-daemon)
+    local -a target_users=()
+    local entry uid username home
+    while IFS=: read -r username _ uid _ _ home _; do
+        [[ "$uid" =~ ^[0-9]+$ ]] || continue
+        # Skip system accounts and daemon users (UID < 1000)
+        (( uid < 1000 )) && continue
+        # Skip daemon users (home under /home/docker-* pattern or matching configured daemons)
+        local is_daemon=false
+        local d
+        for d in "${daemon_names[@]}"; do
+            [[ "$username" == "$d" ]] && { is_daemon=true; break; }
+        done
+        "$is_daemon" && continue
+        target_users+=("$username")
+    done < <(getent passwd)
+
+    if (( ${#target_users[@]} == 0 )); then
+        log_info "No regular user accounts found to configure."
+        return 0
+    fi
+
+    printf 'Regular users found:\n'
+    local i=1 u
+    for u in "${target_users[@]}"; do
+        printf '  %s%d%s) %s\n' "$CLR_CYAN" "$i" "$CLR_RESET" "$u"
+        (( i += 1 ))
+    done
+    printf '  %s%d%s) Configure all\n' "$CLR_CYAN" "$i" "$CLR_RESET"
+    printf '\n'
+
+    local selection
+    read -rp "Select user(s) to configure (comma-separated numbers, or 'q' to quit): " selection
+    [[ "$selection" == 'q' ]] && return 0
+
+    local -a selected_users=()
+    local all_opt=$i
+    IFS=',' read -ra sels <<< "$selection"
+    for sel in "${sels[@]}"; do
+        sel="${sel// /}"
+        if (( sel == all_opt )); then
+            selected_users=("${target_users[@]}")
+            break
+        elif (( sel >= 1 && sel <= ${#target_users[@]} )); then
+            selected_users+=("${target_users[$((sel-1))]}") 
+        else
+            log_warn "Invalid selection: ${sel}"
+        fi
+    done
+
+    (( ${#selected_users[@]} == 0 )) && return 0
+
+    for u in "${selected_users[@]}"; do
+        local sudoers_file="/etc/sudoers.d/dockeru-${u}"
+        local content="# DockerU — passwordless sudo for docker daemon users\n"
+        content+="# Generated by 'sudo dockeru --setup-sudo' on $(date -Iseconds)\n"
+        content+="# SETENV is required so dockeru can pass DOCKER_HOST to the docker binary.\n\n"
+
+        for d in "${daemon_names[@]}"; do
+            local duid="${DOCKERU_DAEMON_UIDS[$d]}"
+            local duser
+            duser="$(get_user_for_uid "$duid" 2>/dev/null || echo "$d")"
+            content+="${u} ALL=(${duser}) NOPASSWD: SETENV: ${docker_bin}\n"
+        done
+
+        local tmpfile
+        tmpfile="$(mktemp)"
+        printf '%b' "$content" > "$tmpfile"
+
+        if visudo -c -f "$tmpfile" 2>/dev/null; then
+            install -m 440 "$tmpfile" "$sudoers_file"
+            rm -f "$tmpfile"
+            log_info "Configured sudo for '${u}': ${sudoers_file}"
+        else
+            rm -f "$tmpfile"
+            log_error "sudoers validation failed for '${u}' — file NOT written."
+        fi
+    done
+
+    printf '\n%s✓ Sudo setup complete.%s Now run %sdockeru ps%s (without sudo).\n\n' \
+        "$CLR_GREEN" "$CLR_RESET" "$CLR_BOLD" "$CLR_RESET"
+}
+
+# --- Config file manipulation -------------------------------------------------
 
 _remove_daemon_from_config() {
     local daemon="$1"

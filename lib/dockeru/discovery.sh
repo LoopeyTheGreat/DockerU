@@ -59,7 +59,7 @@ discover_containers() {
 
     socket="$(get_socket_path "$uid")"
 
-    if [[ ! -S "$socket" ]]; then
+    if ! socket_reachable "$socket"; then
         log_warn "Socket not found for ${daemon_name} (${socket})"
         return 1
     fi

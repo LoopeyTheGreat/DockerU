@@ -117,6 +117,7 @@ main() {
         --refresh)      shift; cmd_refresh "$@"; exit $? ;;
         --status)       shift; cmd_status "$@"; exit $? ;;
         --doctor)       shift; cmd_doctor "$@"; exit $? ;;
+        --setup-sudo)   shift; cmd_setup_sudo "$@"; exit $? ;;
     esac
 
     # Docker passthrough — load config, route, execute

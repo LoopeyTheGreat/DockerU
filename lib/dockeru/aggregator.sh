@@ -38,7 +38,7 @@ _aggregate_ps() {
         uid="$(config_get_uid "$d")"
         [[ -n "$uid" ]] || continue
         socket="$(get_socket_path "$uid")"
-        [[ -S "$socket" ]] || continue
+        socket_reachable "$socket" || continue
         username="$(get_user_for_uid "$uid" 2>/dev/null || echo "$d")"
 
         local output
@@ -85,7 +85,7 @@ _aggregate_images() {
         uid="$(config_get_uid "$d")"
         [[ -n "$uid" ]] || continue
         socket="$(get_socket_path "$uid")"
-        [[ -S "$socket" ]] || continue
+        socket_reachable "$socket" || continue
         username="$(get_user_for_uid "$uid" 2>/dev/null || echo "$d")"
 
         local output
@@ -134,7 +134,7 @@ _aggregate_stats() {
         uid="$(config_get_uid "$d")"
         [[ -n "$uid" ]] || continue
         socket="$(get_socket_path "$uid")"
-        [[ -S "$socket" ]] || continue
+        socket_reachable "$socket" || continue
         username="$(get_user_for_uid "$uid" 2>/dev/null || echo "$d")"
 
         local output
@@ -176,7 +176,7 @@ _aggregate_generic() {
         uid="$(config_get_uid "$d")"
         [[ -n "$uid" ]] || continue
         socket="$(get_socket_path "$uid")"
-        [[ -S "$socket" ]] || continue
+        socket_reachable "$socket" || continue
         username="$(get_user_for_uid "$uid" 2>/dev/null || echo "$d")"
 
         printf '\n%s── %s ──%s\n' "$CLR_CYAN" "$d" "$CLR_RESET"
